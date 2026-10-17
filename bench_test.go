@@ -20,6 +20,32 @@ func BenchmarkObserve(b *testing.B) {
 	}
 }
 
+func BenchmarkFilterPredict(b *testing.B) {
+	f, err := NewFilter(0, 1e-3, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = f.Predict(1)
+		_ = f.Update(float64(i)) // keep the covariance from growing without bound
+	}
+}
+
+func BenchmarkFilterUpdate(b *testing.B) {
+	f, err := NewFilter(0, 1e-3, 1)
+	if err != nil {
+		b.Fatal(err)
+	}
+	_ = f.Predict(1)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = f.Update(float64(i % 100))
+	}
+}
+
 func BenchmarkForecast(b *testing.B) {
 	f := New()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

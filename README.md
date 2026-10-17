@@ -93,6 +93,26 @@ Both are allocation-free on the hot path.
 (`Blend` or `Best`), `WithHysteresis`, and `WithMinSamples`. With no options it
 uses a three-expert ensemble and documented defaults.
 
+## Building on the filter
+
+The per-expert model is exported as `Filter`, a two-state (level, slope) Kalman
+filter with a constant-velocity model and white-acceleration process noise, so
+you can build your own selector on top of it. The ensemble is written on top of
+the same two updates.
+
+```go
+f, err := runway.NewFilter(level, q, r) // q >= 0, r > 0
+f.Predict(dt)                           // advance dt days
+f.Update(z)                             // fold in a measurement
+level, slope := f.Level(), f.Slope()
+p00, p01, p11 := f.Cov()
+```
+
+`WithInitialCovariance` overrides the initial `P` (it must be symmetric and
+positive semidefinite). `Predict` and `Update` validate before committing, so an
+invalid step returns an error and leaves the filter unchanged, and both are
+allocation-free.
+
 ## Known limits
 
 - The confidence band is tight right after a rate change: the filter is briefly
