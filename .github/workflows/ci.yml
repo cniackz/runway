@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go: ['1.24', '1.25']
+        go: ['1.26', '1.27']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -30,13 +30,27 @@ jobs:
       - name: fuzz (short)
         run: go test -run xxx -fuzz FuzzObserveForecast -fuzztime 30s ./...
 
+  floor:
+    # Proves the minimum Go version declared in go.mod. Keep this in step with
+    # the `go` directive there: the declared floor must be a version CI runs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: build
+        run: go build ./...
+      - name: test
+        run: go test ./...
+
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.27'
       - name: gofumpt
         run: |
           go install mvdan.cc/gofumpt@latest
