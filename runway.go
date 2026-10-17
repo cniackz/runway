@@ -236,39 +236,13 @@ func WithMinSamples(n int) Option {
 	}
 }
 
-// expertState is the runtime Kalman state of one expert. P is symmetric, so
-// p01 == p10 and only three entries are kept.
-type expertState struct {
-	q             float64
-	level, slope  float64
-	p00, p01, p11 float64
-}
-
-func (e *expertState) reset(q float64) {
-	e.q = q
-	e.level, e.slope = 0, 0
-	e.p00, e.p01, e.p11 = initLevelVar, 0, initSlopeVar
-}
-
-// predicted returns the state after advancing dt days, without mutating e. The
-// predicted level is the one-step prediction scored against the next sample.
-func (e *expertState) predicted(dt float64) (level, p00, p01, p11 float64) {
-	// x' = F x; the slope is unchanged by a constant-velocity predict.
-	level = e.level + dt*e.slope
-	// P' = F P F^T + Q(dt), with F = [[1,dt],[0,1]] and p10 == p01.
-	m00 := e.p00 + 2*dt*e.p01 + dt*dt*e.p11
-	m01 := e.p01 + dt*e.p11
-	p00 = m00 + e.q*dt*dt*dt/3
-	p01 = m01 + e.q*dt*dt/2
-	p11 = e.p11 + e.q*dt
-	return level, p00, p01, p11
-}
-
 // Forecaster is an ensemble of Kalman experts over one series. Create it with
-// New. It is not safe for concurrent use.
+// New. It is not safe for concurrent use. Each expert is a Filter; the ensemble
+// shares its time and measurement updates through predictLevelCov and
+// updateLevelCov in filter.go.
 type Forecaster struct {
 	cfg     config
-	experts []expertState
+	experts []Filter
 	score   []float64 // decayed normalized loss per expert
 	weight  []float64 // current normalized weights
 	scale   float64   // running noise scale s2
@@ -308,7 +282,7 @@ func New(opts ...Option) *Forecaster {
 	}
 	f := &Forecaster{cfg: cfg}
 	n := len(cfg.experts)
-	f.experts = make([]expertState, n)
+	f.experts = make([]Filter, n)
 	f.score = make([]float64, n)
 	f.weight = make([]float64, n)
 	f.sq = make([]float64, n)
@@ -325,7 +299,10 @@ func New(opts ...Option) *Forecaster {
 // Reset clears all observations and restores the initial uniform weights.
 func (f *Forecaster) Reset() {
 	for i := range f.experts {
-		f.experts[i].reset(f.cfg.experts[i].Q)
+		f.experts[i] = Filter{
+			q: f.cfg.experts[i].Q, r: f.cfg.r,
+			p00: initLevelVar, p01: 0, p11: initSlopeVar,
+		}
 		f.score[i] = 0
 		f.weight[i] = 1 / float64(len(f.experts))
 	}
@@ -376,20 +353,13 @@ func (f *Forecaster) Observe(t time.Time, v float64) error {
 	n := float64(len(f.experts))
 	var sumAbs float64
 	for i := range f.experts {
-		pl, pp00, pp01, pp11 := f.experts[i].predicted(dt)
+		ex := &f.experts[i]
+		pl, pp00, pp01, pp11 := predictLevelCov(ex.level, ex.slope, ex.p00, ex.p01, ex.p11, ex.q, dt)
 		e := v - pl
 		f.sq[i] = e // raw innovation; normalized to a loss below
 		sumAbs += math.Abs(e)
 		// Measurement update of the level from the predicted state.
-		s := pp00 + f.cfg.r
-		k0 := pp00 / s
-		k1 := pp01 / s
-		y := v - pl
-		f.nlevel[i] = pl + k0*y
-		f.nslope[i] = f.experts[i].slope + k1*y
-		f.np00[i] = (1 - k0) * pp00
-		f.np01[i] = (1 - k0) * pp01
-		f.np11[i] = pp11 - k1*pp01
+		f.nlevel[i], f.nslope[i], f.np00[i], f.np01[i], f.np11[i] = updateLevelCov(pl, ex.slope, pp00, pp01, pp11, f.cfg.r, v)
 	}
 	meanAbs := sumAbs / n
 	newScale := meanAbs
