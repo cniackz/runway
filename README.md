@@ -108,8 +108,9 @@ level, slope := f.Level(), f.Slope()
 p00, p01, p11 := f.Cov()
 ```
 
-`WithInitialCovariance` overrides the initial `P` (it must be symmetric and
-positive semidefinite). `Predict` and `Update` validate before committing, so an
+`WithInitialSlope` seeds a non-zero starting rate (from the first two samples,
+say), and `WithInitialCovariance` overrides the initial `P` (it must be symmetric
+and positive semidefinite). `Predict` and `Update` validate before committing, so an
 invalid step returns an error and leaves the filter unchanged, and both are
 allocation-free.
 

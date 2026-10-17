@@ -12,12 +12,12 @@ import (
 // returns an error never changes the state, compared against a Clone taken
 // before it.
 func FuzzFilter(f *testing.F) {
-	f.Add(byte(2), byte(2), byte(2), []byte{2, 3, 4, 5})
-	f.Add(byte(13), byte(9), byte(7), []byte{13, 14, 15, 0}) // NaN q, extreme steps
-	f.Add(byte(0), byte(4), byte(8), []byte{9, 9, 9, 9})     // signed zeros, big values
+	f.Add(byte(2), byte(2), byte(2), byte(2), []byte{2, 3, 4, 5})
+	f.Add(byte(13), byte(9), byte(7), byte(13), []byte{13, 14, 15, 0}) // NaN q and slope, extreme steps
+	f.Add(byte(0), byte(4), byte(8), byte(3), []byte{9, 9, 9, 9})      // signed zeros, big values
 
-	f.Fuzz(func(t *testing.T, li, qi, ri byte, data []byte) {
-		fl, err := NewFilter(pick(li), pick(qi), pick(ri))
+	f.Fuzz(func(t *testing.T, li, qi, ri, si byte, data []byte) {
+		fl, err := NewFilter(pick(li), pick(qi), pick(ri), WithInitialSlope(pick(si)))
 		if err != nil {
 			if fl != nil {
 				t.Fatalf("error returned a non-nil filter")

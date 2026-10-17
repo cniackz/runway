@@ -168,6 +168,47 @@ func TestNewFilterValidation(t *testing.T) {
 	}
 }
 
+// WithInitialSlope seeds the slope, defaults to 0, and rejects a non-finite
+// value.
+func TestWithInitialSlope(t *testing.T) {
+	// Default is 0.
+	f, err := NewFilter(0, 1e-3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Slope() != 0 {
+		t.Errorf("default slope %v, want 0", f.Slope())
+	}
+	// A finite value is stored exactly.
+	for _, s := range []float64{3, -2.5, 1e6, math.SmallestNonzeroFloat64} {
+		g, err := NewFilter(0, 1e-3, 1, WithInitialSlope(s))
+		if err != nil {
+			t.Fatalf("WithInitialSlope(%v): %v", s, err)
+		}
+		if g.Slope() != s {
+			t.Errorf("slope %v, want %v", g.Slope(), s)
+		}
+	}
+	// A non-finite value is rejected and returns no filter.
+	for _, s := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
+		g, err := NewFilter(0, 1e-3, 1, WithInitialSlope(s))
+		if !errors.Is(err, ErrInvalidFilter) || g != nil {
+			t.Errorf("WithInitialSlope(%v): err %v, filter %v", s, err, g)
+		}
+	}
+	// A seeded slope is used: predicting ahead moves by slope*dt.
+	h, err := NewFilter(100, 1e-9, 1, WithInitialSlope(5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Predict(10); err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(h.Level()-150) > 1e-9 {
+		t.Errorf("level after predict %v, want 150", h.Level())
+	}
+}
+
 // Predict and Update reject invalid input and leave the state unchanged.
 func TestFilterStepValidation(t *testing.T) {
 	f, err := NewFilter(10, 1e-3, 1)

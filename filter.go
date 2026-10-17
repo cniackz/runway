@@ -47,6 +47,19 @@ func NewFilter(level, q, r float64, opts ...FilterOption) (*Filter, error) {
 	return f, nil
 }
 
+// WithInitialSlope sets the initial slope, in units per day; the default is 0.
+// A caller that already has a rate (from the first two samples, say) can seed it
+// here. A non-finite value returns ErrInvalidFilter.
+func WithInitialSlope(s float64) FilterOption {
+	return func(f *Filter) error {
+		if !finite(s) {
+			return ErrInvalidFilter
+		}
+		f.slope = s
+		return nil
+	}
+}
+
 // WithInitialCovariance sets the initial covariance P. It must be symmetric
 // (p10 is taken equal to p01) and positive semidefinite: p00 >= 0, p11 >= 0 and
 // the determinant p00*p11 - p01^2 >= 0, all finite. Otherwise NewFilter returns
