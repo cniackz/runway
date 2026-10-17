@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ['1.24', '1.25']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: build
+        run: go build ./...
+      - name: vet
+        run: go vet ./...
+      - name: test -race
+        run: go test -race ./...
+      - name: fuzz (short)
+        run: go test -run xxx -fuzz FuzzObserveForecast -fuzztime 30s ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: gofumpt
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          test -z "$(gofumpt -l .)" || { gofumpt -l .; echo "run gofumpt -w ."; exit 1; }
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
